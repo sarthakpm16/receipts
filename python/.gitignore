@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data and embeddings (keep structure, ignore large files)
+embeddings/*.pkl
+embeddings/*.npy
+embeddings/faiss_index
+data/*.csv
+data/*.json
+
+# Models (will be downloaded automatically)
+.cache/
+models/
+
+# Logs
+*.log

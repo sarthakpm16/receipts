@@ -16,6 +16,11 @@ receipts/
 │   │   └── index.ts  # Backend entry point
 │   ├── package.json
 │   └── tsconfig.json
+├── python/            # Python ML processing module
+│   ├── imessage_processor.py  # Main processing script
+│   ├── data/          # CSV data and outputs
+│   ├── embeddings/    # FAISS indices and embeddings
+│   └── requirements.txt
 └── package.json       # Root workspace configuration
 ```
 
@@ -78,9 +83,40 @@ cd backend
 npm run dev
 ```
 
+## Python ML Module
+
+The `python/` directory contains the iMessage processing module for embeddings, drama detection, and conversation summaries.
+
+### Setup
+
+```bash
+cd python
+pip install -r requirements.txt
+```
+
+### Usage
+
+See `python/README.md` for detailed documentation.
+
+Quick start:
+
+```python
+from imessage_processor import process_all, search_messages, get_drama_summary
+
+# Process all data
+df, summaries = process_all()
+
+# Search messages
+results = search_messages("deadline", top_k=5)
+
+# Get drama summary
+summary = get_drama_summary("Chat Name")
+```
+
 ## Team Workflow
 
 - **Frontend developer**: Work in the `frontend/` directory
 - **Backend developer**: Work in the `backend/` directory
+- **ML/Python developer**: Work in the `python/` directory
 
 This separation minimizes merge conflicts as each team member works in their own directory.
