@@ -1,7 +1,5 @@
 # Receipts App
 
-A monorepo project with separate frontend and backend directories to minimize merge conflicts between team members.
-
 ## Project Structure
 
 ```
