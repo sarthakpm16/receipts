@@ -4,93 +4,83 @@ import type { Thread, Contact, SearchData, ContactFilter } from "@/components/se
 export const mockAllContacts: Contact[] = [
   { name: "Alex", type: "person" },
   { name: "Jordan", type: "person" },
-  { name: "Sam", type: "person" },
-  { name: "Riley", type: "person" },
   { name: "Taylor", type: "person" },
   { name: "Morgan", type: "person" },
   { name: "Casey", type: "person" },
-  { name: "Avery", type: "person" },
-  { name: "Drew", type: "person" },
-  { name: "Blake", type: "person" },
-  { name: "Beach Week Planning", type: "group" },
-  { name: "Family", type: "group" },
+  { name: "Riley", type: "person" },
+  { name: "Beach Week Crew", type: "group" },
   { name: "Work Team", type: "group" },
+  { name: "Family", type: "group" },
   { name: "College Friends", type: "group" },
-  { name: "Roommates", type: "group" },
-  { name: "Soccer Squad", type: "group" },
-  { name: "Dinner Club", type: "group" },
-  { name: "Study Group", type: "group" },
 ]
 
 export const mockRecentContacts: Contact[] = [
   { name: "Alex", type: "person" },
   { name: "Jordan", type: "person" },
-  { name: "Sam", type: "person" },
-  { name: "Beach Week Planning", type: "group" },
-  { name: "Family", type: "group" },
+  { name: "Beach Week Crew", type: "group" },
+  { name: "Work Team", type: "group" },
 ]
 
-// Mock thread data for "Ask" mode
-const mockAskThreads: Thread[] = [
+// Mock threads for "exact" search mode
+export const mockExactThreads: Thread[] = [
   {
-    id: "t1",
-    date: "Jun 10, 2025 - 3:42 PM",
-    context: "Beach Week Planning",
+    id: "1",
+    date: "March 15, 2024",
+    context: "Beach Week Crew",
     messages: [
-      { sender: "Alex", text: "yo are we actually doing beach week this year or what", time: "3:42 PM" },
-      { sender: "You", text: "im so down, when were we thinking?", time: "3:43 PM", isUser: true },
-      { sender: "Jordan", text: "i can do june 18-22", time: "3:45 PM" },
-      { sender: "Sam", text: "same, i found a sick airbnb in OBX for like $200/night split", time: "3:47 PM" },
-      { sender: "You", text: "bet, send the link", time: "3:48 PM", isUser: true },
+      { sender: "Alex", text: "yo who's bringing the speaker", time: "2:45 PM" },
+      { sender: "Jordan", text: "I got it", time: "2:47 PM" },
+      { sender: "You", text: "perfect. don't forget the aux cord this time lol", time: "2:48 PM", isUser: true },
     ],
   },
   {
-    id: "t2",
-    date: "Jun 13, 2025 - 7:15 PM",
-    context: "Beach Week Planning",
-    messages: [
-      { sender: "Sam", text: "ok i just booked the airbnb, everyone venmo me $50 deposit", time: "7:15 PM" },
-      { sender: "Alex", text: "done. who's driving?", time: "7:18 PM" },
-      { sender: "Jordan", text: "i can drive, my car fits 4 + luggage", time: "7:20 PM" },
-      { sender: "You", text: "i'll bring the speaker and the cooler", time: "7:22 PM", isUser: true },
-      { sender: "Riley", text: "what should i bring??", time: "7:25 PM" },
-      { sender: "You", text: "snacks and good vibes lol", time: "7:26 PM", isUser: true },
-    ],
-  },
-  {
-    id: "t3",
-    date: "Jun 17, 2025 - 11:30 AM",
+    id: "2",
+    date: "March 14, 2024",
     context: "Alex",
     messages: [
-      { sender: "Alex", text: "bro are you packed for beach week yet", time: "11:30 AM" },
-      { sender: "You", text: "literally haven't started. leaving tomorrow lmao", time: "11:32 AM", isUser: true },
-      { sender: "Alex", text: "classic. don't forget sunscreen this time", time: "11:33 AM" },
+      { sender: "Alex", text: "dude I just found out the house has a pool table", time: "11:20 AM" },
+      { sender: "You", text: "no way that's sick", time: "11:22 AM", isUser: true },
+      { sender: "Alex", text: "yeah I'm hyped. you better be ready to lose", time: "11:23 AM" },
+      { sender: "You", text: "lmao we'll see about that", time: "11:25 AM", isUser: true },
+    ],
+  },
+  {
+    id: "3",
+    date: "March 13, 2024",
+    context: "Taylor",
+    messages: [
+      { sender: "Taylor", text: "what time are we leaving Friday?", time: "4:30 PM" },
+      { sender: "You", text: "probably around 10am if that works", time: "4:35 PM", isUser: true },
+      { sender: "Taylor", text: "sounds good I'll be ready", time: "4:36 PM" },
     ],
   },
 ]
 
-// Mock thread data for "Exact" mode
-const mockExactThreads: Thread[] = [
+// Mock threads for "ask" search mode
+export const mockAskThreads: Thread[] = [
   {
-    id: "e1",
-    date: "Jun 10, 2025 - 3:42 PM",
-    context: "Beach Week Planning",
+    id: "4",
+    date: "March 12, 2024",
+    context: "Jordan",
     messages: [
-      { sender: "Alex", text: "yo are we actually doing beach week this year or what", time: "3:42 PM" },
-      { sender: "You", text: "im so down, when were we thinking?", time: "3:43 PM", isUser: true },
+      { sender: "Jordan", text: "hey did you get the groceries for the trip?", time: "7:15 PM" },
+      { sender: "You", text: "yeah I got chips, drinks, and stuff for breakfast", time: "7:20 PM", isUser: true },
+      { sender: "Jordan", text: "awesome thanks", time: "7:21 PM" },
     ],
   },
   {
-    id: "e2",
-    date: "Jun 13, 2025 - 7:15 PM",
-    context: "Beach Week Planning",
+    id: "5",
+    date: "March 10, 2024",
+    context: "Beach Week Crew",
     messages: [
-      { sender: "Sam", text: "ok i just booked the airbnb for beach week, everyone venmo me $50", time: "7:15 PM" },
+      { sender: "Morgan", text: "so the house address is 123 Ocean Drive right?", time: "3:00 PM" },
+      { sender: "Casey", text: "yeah that's it", time: "3:02 PM" },
+      { sender: "You", text: "I'll put it in my GPS", time: "3:05 PM", isUser: true },
     ],
   },
   {
-    id: "e3",
-    date: "Jun 17, 2025 - 11:30 AM",
+    id: "6",
+    date: "March 8, 2024",
     context: "Alex",
     messages: [
       { sender: "Alex", text: "bro are you packed for beach week yet", time: "11:30 AM" },
