@@ -28,6 +28,24 @@ def get_messages(chat_id: int, limit=50):
     con.close()
     return [dict(r) for r in rows]
 
+
+def get_messages_in_range(chat_id: int, start_date: str, end_date: str):
+    """
+    Get messages in a thread within a date range (inclusive).
+    start_date, end_date: "YYYY-MM-DD". Times are treated as start of day and end of day.
+    """
+    con = connect()
+    start_ts = f"{start_date} 00:00:00"
+    end_ts = f"{end_date} 23:59:59"
+    rows = con.execute(
+        """SELECT sent_at, sender_name, text FROM messages
+           WHERE chat_id = ? AND sent_at >= ? AND sent_at <= ?
+           ORDER BY sent_at ASC""",
+        (chat_id, start_ts, end_ts),
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
 def search_exact(query: str, context_size: int = 2, chat_id: int = None):
     """
     Search for exact keyword matches and return context windows around each match.

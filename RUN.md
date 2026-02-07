@@ -83,6 +83,8 @@ The backend loads `.env` and `.env.local` automatically. Alternatively you can s
 
 If `GEMINI_API_KEY` is not set, the Ask endpoint returns 400 with a message to set it.
 
+**Rate limits (429):** The app uses **gemini-2.5-flash-lite** by default (free tier: 15 requests/min, 1000/day). If you see "quota exceeded" with **limit: 0**, your project has no quota for that model — set **`GEMINI_MODEL=gemini-1.5-flash`** (or another model with free quota) in `.env.local` and restart. See [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
+
 ### If you see `ModuleNotFoundError: No module named 'anyio._backends'` (500 on /threads)
 
 This usually means a broken or mixed install of `anyio` (e.g. user vs system site-packages). Fix it by using a **virtual environment** and reinstalling:

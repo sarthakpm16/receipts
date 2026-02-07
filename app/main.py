@@ -10,6 +10,7 @@ load_dotenv(_root / ".env.local")
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from google.genai.errors import ClientError
 from app.imessage_store import list_threads, get_messages, search_exact, get_expanded_context
 from app.ask_service import ask
 
@@ -25,7 +26,9 @@ app.add_middleware(
 
 class AskBody(BaseModel):
     query: str
-    thread_ids: list[int] | None = None
+    chat_id: int
+    period_start: str  # YYYY-MM-DD
+    period_end: str    # YYYY-MM-DD (same day only; free tier token limit)
 
 
 @app.get("/")
@@ -103,10 +106,23 @@ def expand(chat_id: int, message_id: int, before: int = 10, after: int = 10):
 
 @app.post("/ask")
 def ask_endpoint(body: AskBody):
-    """Semantic Q&A over your messages. Requires GEMINI_API_KEY."""
+    """Semantic Q&A over one thread in a single-day window. Requires GEMINI_API_KEY."""
     try:
-        return ask(query=body.query.strip(), thread_ids=body.thread_ids)
+        return ask(
+            query=body.query.strip(),
+            chat_id=body.chat_id,
+            period_start=body.period_start.strip(),
+            period_end=body.period_end.strip(),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except ClientError as e:
+        status = getattr(e, "status_code", None) or (e.args[0] if e.args else None)
+        if status == 429 or "RESOURCE_EXHAUSTED" in str(e):
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API quota exceeded. If the error says 'limit: 0', set GEMINI_MODEL=gemini-2.5-flash-lite or gemini-1.5-flash (models with free quota). See https://ai.google.dev/gemini-api/docs/rate-limits",
+            )
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {e!s}")

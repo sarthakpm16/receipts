@@ -28,14 +28,34 @@ export interface MessagesResponse {
   messages: ApiMessage[];
 }
 
-export async function getThreads(limit = 50): Promise<ApiThread[]> {
-  const res = await fetch(`${API_BASE}/threads?limit=${limit}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to fetch threads");
+const FETCH_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...options, signal: ctrl.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
   }
-  const data: ThreadsResponse = await res.json();
-  return data.threads;
+}
+
+export async function getThreads(limit = 50): Promise<ApiThread[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/threads?limit=${limit}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === "string" ? err.detail : "Failed to fetch threads");
+    }
+    const data: ThreadsResponse = await res.json();
+    return data.threads;
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("Request timed out. Is the API running? Try: uvicorn app.main:app --reload");
+    }
+    throw e;
+  }
 }
 
 export async function getMessages(chatId: number, limit = 100): Promise<ApiMessage[]> {
@@ -53,17 +73,41 @@ export interface AskSource {
   title: string;
 }
 
+export interface AskHighlightMessage {
+  sent_at: string;
+  sender_name: string;
+  text: string;
+  is_match: boolean;
+}
+
+export interface AskHighlight {
+  chat_id: number;
+  title: string;
+  messages: AskHighlightMessage[];
+}
+
 export interface AskResponse {
   answer: string;
   sources: AskSource[];
+  highlight: AskHighlight | null;
 }
 
-export async function askQuery(query: string, threadIds?: number[]): Promise<AskResponse> {
+export async function askQuery(
+  query: string,
+  chatId: number,
+  periodStart: string,
+  periodEnd: string
+): Promise<AskResponse> {
   try {
     const res = await fetch(`${API_BASE}/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: query.trim(), thread_ids: threadIds ?? null }),
+      body: JSON.stringify({
+        query: query.trim(),
+        chat_id: chatId,
+        period_start: periodStart,
+        period_end: periodEnd,
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));

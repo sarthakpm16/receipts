@@ -137,6 +137,12 @@ async function ensureThreads(): Promise<ApiThread[]> {
   return cachedThreads
 }
 
+/** Default ask day: today (single day for free-tier token limit). */
+export function defaultAskPeriod(): { periodStart: string; periodEnd: string } {
+  const today = format(new Date(), "yyyy-MM-dd")
+  return { periodStart: today, periodEnd: today }
+}
+
 /**
  * SearchData backed by FastAPI: contacts from thread list, search runs against real messages.
  */
@@ -145,8 +151,20 @@ export async function getSearchData(): Promise<SearchData> {
   const allContacts = threadsToContacts(threads)
   const recentContacts = threadsToContacts(threads.slice(0, 8))
 
-  async function onAsk(query: string, _filter: ContactFilter): Promise<AskResult> {
-    return askQuery(query)
+  async function onAsk(
+    query: string,
+    filter: ContactFilter,
+    periodStart: string,
+    periodEnd: string
+  ): Promise<AskResult> {
+    if (filter.type === "all" || !filter.name) {
+      throw new Error("Select a conversation to ask in (choose a person or group above).")
+    }
+    const thread = threads.find((t) => t.title === filter.name)
+    if (!thread) {
+      throw new Error(`Conversation "${filter.name}" not found.`)
+    }
+    return askQuery(query, thread.chat_id, periodStart, periodEnd)
   }
 
   return {

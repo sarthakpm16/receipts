@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react"
 import { SearchModeToggle } from "./search-mode-toggle"
 import { ContactSelector, type ContactFilter } from "./contact-selector"
 import Tapback from "./tapback"
+import { defaultAskPeriod } from "@/lib/search-data"
 
 type SearchMode = "exact" | "ask"
 
@@ -36,16 +37,30 @@ export interface Contact {
   type: "person" | "group"
 }
 
+export interface AskHighlightMessage {
+  sent_at: string
+  sender_name: string
+  text: string
+  is_match: boolean
+}
+
 export interface AskResult {
   answer: string
   sources: { chat_id: number; title: string }[]
+  highlight: { chat_id: number; title: string; messages: AskHighlightMessage[] } | null
 }
 
 export interface SearchData {
   allContacts: Contact[]
   recentContacts: Contact[]
   onSearch: (query: string, mode: SearchMode, filter: ContactFilter) => Promise<Thread[]>
-  onAsk?: (query: string, filter: ContactFilter) => Promise<AskResult>
+  /** Ask requires a selected thread (filter) and a single day. */
+  onAsk?: (query: string, filter: ContactFilter, periodStart: string, periodEnd: string) => Promise<AskResult>
+}
+
+function formatMessageTime(sentAt: string): string {
+  const normalized = sentAt.replace(" ", "T")
+  return new Date(normalized).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
 }
 
 /* ── iMessage-style bubble for a single message ── */
@@ -252,6 +267,8 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
   const [searchedQuery, setSearchedQuery] = useState("")
   const [unfilteredResults, setUnfilteredResults] = useState<Thread[] | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [askPeriodStart, setAskPeriodStart] = useState(() => defaultAskPeriod().periodStart)
+  const [askPeriodEnd, setAskPeriodEnd] = useState(() => defaultAskPeriod().periodEnd)
   
   // Animation states for empty state
   const [showFirstMessage, setShowFirstMessage] = useState(false)
@@ -301,7 +318,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
 
     try {
       if (mode === "ask" && searchData.onAsk) {
-        const ask = await searchData.onAsk(query, filter)
+        const ask = await searchData.onAsk(query, filter, askPeriodStart, askPeriodEnd)
         setAskResult(ask)
       } else {
         // Backend now handles filtering, no need for client-side filtering
@@ -452,6 +469,11 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
               <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-4 text-sm text-red-800">
                 <p className="font-medium">Request failed</p>
                 <p className="mt-1 text-red-700">{searchError}</p>
+                {(searchError.includes("quota") || searchError.includes("429")) && (
+                  <p className="mt-2 text-red-600">
+                    Free tier limit: wait 1–2 minutes between questions. Repeated identical questions use the cache and don’t count.
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={handleClear}
@@ -462,28 +484,37 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
               </div>
             )}
 
-            {/* Ask mode: answer + sources */}
+            {/* Ask mode: show only the conversation block, same as exact search */}
             {!loading && askResult && (
               <div className="space-y-6 pb-6">
-                <div className="overflow-hidden rounded-2xl bg-white/80 shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] backdrop-blur-sm">
-                  <div className="border-b border-black/[0.04] px-4 py-2.5">
-                    <span className="text-sm font-semibold text-gray-900">Answer</span>
+                {askResult.highlight && askResult.highlight.messages.length > 0 ? (
+                  (() => {
+                    const h = askResult.highlight
+                    const matchIndex = h.messages.findIndex((m) => m.is_match)
+                    const firstSentAt = h.messages[0]?.sent_at ?? ""
+                    const dateStr = firstSentAt ? new Date(firstSentAt.replace(" ", "T")).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : ""
+                    const threadFromAsk: Thread = {
+                      id: `ask-${h.chat_id}`,
+                      date: dateStr,
+                      context: h.title,
+                      messages: h.messages.map((m) => ({
+                        sender: m.sender_name === "ME" ? "You" : m.sender_name,
+                        text: m.text,
+                        time: formatMessageTime(m.sent_at),
+                        isUser: m.sender_name === "ME",
+                        isMatch: m.is_match,
+                      })),
+                      matchIndex: matchIndex >= 0 ? matchIndex : undefined,
+                      hasMoreBefore: false,
+                      hasMoreAfter: false,
+                      chatId: h.chat_id,
+                    }
+                    return <ConversationThread thread={threadFromAsk} />
+                  })()
+                ) : (
+                  <div className="rounded-2xl border border-black/[0.06] bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground">
+                    No matching message in this thread for that question.
                   </div>
-                  <div className="whitespace-pre-wrap px-4 py-4 text-[15px] leading-snug text-foreground">
-                    {askResult.answer}
-                  </div>
-                </div>
-                {askResult.sources.length > 0 && (
-                  <>
-                    <p className="text-xs font-medium text-muted-foreground">Based on conversations with:</p>
-                    <ul className="space-y-1 text-sm text-foreground">
-                      {askResult.sources.map((s) => (
-                        <li key={s.chat_id} className="rounded-lg bg-white/60 px-3 py-2 ring-1 ring-black/[0.04]">
-                          {s.title}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
                 )}
               </div>
             )}
@@ -548,6 +579,31 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
               <SearchModeToggle mode={mode} onModeChange={setMode} />
             </div>
 
+            {/* Ask mode: require thread + single day (free tier token limit) */}
+            {mode === "ask" && (
+              <div className="mb-2.5 flex flex-wrap items-center gap-2 text-sm">
+                {filter.type === "all" ? (
+                  <span className="rounded-md bg-amber-100 px-2.5 py-1.5 text-amber-800">
+                    Select a conversation above to ask in
+                  </span>
+                ) : (
+                  <>
+                    <label className="text-muted-foreground">Day:</label>
+                    <input
+                      type="date"
+                      value={askPeriodStart}
+                      onChange={(e) => {
+                        const d = e.target.value
+                        setAskPeriodStart(d)
+                        setAskPeriodEnd(d)
+                      }}
+                      className="rounded-md border border-border/60 bg-white px-2.5 py-1.5 text-foreground"
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Search bar */}
             <form onSubmit={handleSubmit} className="relative">
               <input
@@ -560,7 +616,10 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
               />
               <button
                 type="submit"
-                disabled={!input.trim()}
+                disabled={
+                  !input.trim() ||
+                  (mode === "ask" && filter.type === "all")
+                }
                 className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-iosBlue text-white transition-opacity disabled:opacity-30"
                 aria-label="Search"
               >
