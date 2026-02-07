@@ -28,7 +28,7 @@ export function SearchModeToggle({ mode, onModeChange }: SearchModeToggleProps) 
         onClick={() => onModeChange("ask")}
         className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
           mode === "ask"
-            ? "bg-imsg-blue text-white shadow-sm"
+            ? "bg-iosBlue text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground"
         }`}
       >

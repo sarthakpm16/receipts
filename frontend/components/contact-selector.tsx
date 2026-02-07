@@ -1,26 +1,21 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import type { Contact } from "./search-interface"
 
 export type ContactFilter = {
   type: "all" | "person" | "group"
   name?: string
 }
 
-// All contacts - would come from your data
-const allPeople = ["Alex", "Jordan", "Sam", "Riley", "Taylor", "Morgan", "Casey", "Avery", "Drew", "Blake"]
-const allGroups = ["Beach Week Planning", "Family", "Work Team", "College Friends", "Roommates", "Soccer Squad", "Dinner Club", "Study Group"]
-
-// Recent contacts - shown by default
-const recentPeople = ["Alex", "Jordan", "Sam"]
-const recentGroups = ["Beach Week Planning", "Family"]
-
 interface ContactSelectorProps {
   filter: ContactFilter
   onFilterChange: (filter: ContactFilter) => void
+  allContacts: Contact[]
+  recentContacts: Contact[]
 }
 
-export function ContactSelector({ filter, onFilterChange }: ContactSelectorProps) {
+export function ContactSelector({ filter, onFilterChange, allContacts, recentContacts }: ContactSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [showAbove, setShowAbove] = useState(false)
@@ -63,15 +58,15 @@ export function ContactSelector({ filter, onFilterChange }: ContactSelectorProps
 
   // Show recent by default, search all when user types
   const isSearching = searchQuery.length > 0
-  const peopleToSearch = isSearching ? allPeople : recentPeople
-  const groupsToSearch = isSearching ? allGroups : recentGroups
-
-  const filteredPeople = peopleToSearch.filter((name) =>
-    name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-  const filteredGroups = groupsToSearch.filter((name) =>
-    name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const contactsToSearch = isSearching ? allContacts : recentContacts
+  
+  const filteredPeople = contactsToSearch
+    .filter((c) => c.type === "person" && c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .map((c) => c.name)
+  
+  const filteredGroups = contactsToSearch
+    .filter((c) => c.type === "group" && c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .map((c) => c.name)
 
   const hasResults = filteredPeople.length > 0 || filteredGroups.length > 0
 
@@ -88,7 +83,7 @@ export function ContactSelector({ filter, onFilterChange }: ContactSelectorProps
           </svg>
         )}
         {filter.type === "person" && (
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#007AFF] text-[9px] font-semibold text-white">
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-iosBlue text-[9px] font-semibold text-white">
             {filter.name?.[0]}
           </span>
         )}
@@ -155,11 +150,11 @@ export function ContactSelector({ filter, onFilterChange }: ContactSelectorProps
                   }`}
                 >
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100">
-                    <svg className={`h-4 w-4 ${filter.type === "all" ? "text-[#007AFF]" : "text-gray-500"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className={`h-4 w-4 ${filter.type === "all" ? "text-iosBlue" : "text-gray-500"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
                   </div>
-                  <span className={`text-sm ${filter.type === "all" ? "font-semibold text-[#007AFF]" : "font-medium text-gray-900"}`}>
+                  <span className={`text-sm ${filter.type === "all" ? "font-semibold text-iosBlue" : "font-medium text-gray-900"}`}>
                     All Messages
                   </span>
                 </button>
@@ -196,12 +191,12 @@ export function ContactSelector({ filter, onFilterChange }: ContactSelectorProps
                         : ""
                     }`}
                   >
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#007AFF] text-[11px] font-semibold text-white">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-iosBlue text-[11px] font-semibold text-white">
                       {name[0]}
                     </div>
                     <span className={`text-sm ${
                       filter.type === "person" && filter.name === name
-                        ? "font-semibold text-[#007AFF]"
+                        ? "font-semibold text-iosBlue"
                         : "font-medium text-gray-900"
                     }`}>
                       {name}
@@ -240,7 +235,7 @@ export function ContactSelector({ filter, onFilterChange }: ContactSelectorProps
                     </div>
                     <span className={`flex-1 truncate text-sm ${
                       filter.type === "group" && filter.name === name
-                        ? "font-semibold text-[#007AFF]"
+                        ? "font-semibold text-iosBlue"
                         : "font-medium text-gray-900"
                     }`}>
                       {name}

@@ -4,96 +4,44 @@ import React from "react"
 import { useState, useRef, useEffect } from "react"
 import { SearchModeToggle } from "./search-mode-toggle"
 import { ContactSelector, type ContactFilter } from "./contact-selector"
+import Tapback from "./tapback"
 
 type SearchMode = "exact" | "ask"
 
-interface TextMessage {
+// Re-export for convenience
+export type { ContactFilter }
+
+export interface TextMessage {
   sender: string
   text: string
   time: string
   isUser?: boolean
 }
 
-interface Thread {
+export interface Thread {
   id: string
   date: string
   context: string
   messages: TextMessage[]
 }
 
-const mockThreads: Thread[] = [
-  {
-    id: "t1",
-    date: "Jun 10, 2025 - 3:42 PM",
-    context: "Beach Week Planning",
-    messages: [
-      { sender: "Alex", text: "yo are we actually doing beach week this year or what", time: "3:42 PM" },
-      { sender: "You", text: "im so down, when were we thinking?", time: "3:43 PM", isUser: true },
-      { sender: "Jordan", text: "i can do june 18-22", time: "3:45 PM" },
-      { sender: "Sam", text: "same, i found a sick airbnb in OBX for like $200/night split", time: "3:47 PM" },
-      { sender: "You", text: "bet, send the link", time: "3:48 PM", isUser: true },
-    ],
-  },
-  {
-    id: "t2",
-    date: "Jun 13, 2025 - 7:15 PM",
-    context: "Beach Week Planning",
-    messages: [
-      { sender: "Sam", text: "ok i just booked the airbnb, everyone venmo me $50 deposit", time: "7:15 PM" },
-      { sender: "Alex", text: "done. who's driving?", time: "7:18 PM" },
-      { sender: "Jordan", text: "i can drive, my car fits 4 + luggage", time: "7:20 PM" },
-      { sender: "You", text: "i'll bring the speaker and the cooler", time: "7:22 PM", isUser: true },
-      { sender: "Riley", text: "what should i bring??", time: "7:25 PM" },
-      { sender: "You", text: "snacks and good vibes lol", time: "7:26 PM", isUser: true },
-    ],
-  },
-  {
-    id: "t3",
-    date: "Jun 17, 2025 - 11:30 AM",
-    context: "Alex",
-    messages: [
-      { sender: "Alex", text: "bro are you packed for beach week yet", time: "11:30 AM" },
-      { sender: "You", text: "literally haven't started. leaving tomorrow lmao", time: "11:32 AM", isUser: true },
-      { sender: "Alex", text: "classic. don't forget sunscreen this time", time: "11:33 AM" },
-    ],
-  },
-]
+export interface Contact {
+  name: string
+  type: "person" | "group"
+}
 
-const exactThreads: Thread[] = [
-  {
-    id: "e1",
-    date: "Jun 10, 2025 - 3:42 PM",
-    context: "Beach Week Planning",
-    messages: [
-      { sender: "Alex", text: "yo are we actually doing beach week this year or what", time: "3:42 PM" },
-      { sender: "You", text: "im so down, when were we thinking?", time: "3:43 PM", isUser: true },
-    ],
-  },
-  {
-    id: "e2",
-    date: "Jun 13, 2025 - 7:15 PM",
-    context: "Beach Week Planning",
-    messages: [
-      { sender: "Sam", text: "ok i just booked the airbnb for beach week, everyone venmo me $50", time: "7:15 PM" },
-    ],
-  },
-  {
-    id: "e3",
-    date: "Jun 17, 2025 - 11:30 AM",
-    context: "Alex",
-    messages: [
-      { sender: "Alex", text: "bro are you packed for beach week yet", time: "11:30 AM" },
-      { sender: "You", text: "literally haven't started. leaving tomorrow lmao", time: "11:32 AM", isUser: true },
-    ],
-  },
-]
+export interface SearchData {
+  allContacts: Contact[]
+  recentContacts: Contact[]
+  onSearch: (query: string, mode: SearchMode, filter: ContactFilter) => Promise<Thread[]>
+}
 
 /* ── iMessage-style bubble for a single message ── */
 function MessageBubble({ msg, showSender }: { msg: TextMessage; showSender: boolean }) {
   if (msg.isUser) {
     return (
       <div className="flex flex-col items-end">
-        <div className="max-w-[75%] rounded-2xl rounded-br-md bg-[#007AFF] px-3.5 py-2">
+        <div className="max-w-[75%] rounded-2xl rounded-br-md bg-iosBlue px-3.5 py-2">
           <p className="text-[15px] leading-snug text-white">{msg.text}</p>
         </div>
         <span className="mt-0.5 pr-1 text-[10px] text-muted-foreground/60">{msg.time}</span>
@@ -110,6 +58,45 @@ function MessageBubble({ msg, showSender }: { msg: TextMessage; showSender: bool
         <p className="text-[15px] leading-snug text-foreground">{msg.text}</p>
       </div>
       <span className="mt-0.5 pl-1 text-[10px] text-muted-foreground/60">{msg.time}</span>
+    </div>
+  )
+}
+
+/* ── Skeleton loader for threads ── */
+function ThreadSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white/80 shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] backdrop-blur-sm">
+      {/* Header skeleton */}
+      <div className="flex items-center justify-between border-b border-black/[0.04] px-4 py-2.5">
+        <div className="h-4 w-32 overflow-hidden rounded bg-gray-200">
+          <div className="h-full w-full animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%]" />
+        </div>
+        <div className="h-3 w-24 overflow-hidden rounded bg-gray-200">
+          <div className="h-full w-full animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] [animation-delay:100ms]" />
+        </div>
+      </div>
+      
+      {/* Message bubbles skeleton */}
+      <div className="space-y-2 px-3 py-3">
+        {/* Incoming message */}
+        <div className="flex justify-start">
+          <div className="h-12 w-48 overflow-hidden rounded-2xl rounded-bl-md bg-gray-200">
+            <div className="h-full w-full animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] [animation-delay:200ms]" />
+          </div>
+        </div>
+        {/* Outgoing message */}
+        <div className="flex justify-end">
+          <div className="h-10 w-36 overflow-hidden rounded-2xl rounded-br-md bg-gray-200">
+            <div className="h-full w-full animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] [animation-delay:400ms]" />
+          </div>
+        </div>
+        {/* Incoming message */}
+        <div className="flex justify-start">
+          <div className="h-14 w-52 overflow-hidden rounded-2xl rounded-bl-md bg-gray-200">
+            <div className="h-full w-full animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] [animation-delay:600ms]" />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -143,7 +130,7 @@ function ConversationThread({ thread }: { thread: Thread }) {
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-center gap-1 border-t border-black/[0.04] py-2.5 text-[12px] font-medium text-[#007AFF] transition-colors hover:bg-black/[0.01]"
+          className="flex w-full items-center justify-center gap-1 border-t border-black/[0.04] py-2.5 text-[12px] font-medium text-iosBlue transition-colors hover:bg-black/[0.01]"
         >
           <svg
             className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`}
@@ -166,7 +153,7 @@ function ConversationThread({ thread }: { thread: Thread }) {
 }
 
 /* ── Main search interface ── */
-export function SearchInterface() {
+export function SearchInterface({ searchData }: { searchData: SearchData }) {
   const [results, setResults] = useState<Thread[] | null>(null)
   const [input, setInput] = useState("")
   const [mode, setMode] = useState<SearchMode>("ask")
@@ -175,6 +162,39 @@ export function SearchInterface() {
   const [searchedQuery, setSearchedQuery] = useState("")
   const [unfilteredResults, setUnfilteredResults] = useState<Thread[] | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  
+  // Animation states for empty state
+  const [showFirstMessage, setShowFirstMessage] = useState(false)
+  const [showTapback, setShowTapback] = useState(false)
+  const [showTyping, setShowTyping] = useState(false)
+  const [showSecondMessage, setShowSecondMessage] = useState(false)
+  
+  // Animate empty state messages
+  useEffect(() => {
+    if (!results && !loading && !searchedQuery) {
+      // Reset animation
+      setShowFirstMessage(false)
+      setShowTapback(false)
+      setShowTyping(false)
+      setShowSecondMessage(false)
+      
+      // Sequence the animation - faster timing
+      const timer1 = setTimeout(() => setShowFirstMessage(true), 100)
+      const timer2 = setTimeout(() => setShowTapback(true), 400)
+      const timer3 = setTimeout(() => setShowTyping(true), 650)
+      const timer4 = setTimeout(() => {
+        setShowTyping(false)
+        setShowSecondMessage(true)
+      }, 1400)
+      
+      return () => {
+        clearTimeout(timer1)
+        clearTimeout(timer2)
+        clearTimeout(timer3)
+        clearTimeout(timer4)
+      }
+    }
+  }, [results, loading, searchedQuery])
 
   function filterThreadsByContact(threads: Thread[]): Thread[] {
     if (filter.type === "all") return threads
@@ -194,7 +214,7 @@ export function SearchInterface() {
     })
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!input.trim()) return
 
@@ -202,19 +222,25 @@ export function SearchInterface() {
     setInput("")
     setLoading(true)
 
-    setTimeout(() => {
-      const baseResults = mode === "ask" ? mockThreads : exactThreads
+    try {
+      const baseResults = await searchData.onSearch(input.trim(), mode, filter)
       setUnfilteredResults(baseResults)
       const filteredResults = filterThreadsByContact(baseResults)
       setResults(filteredResults)
+    } catch (error) {
+      console.error("Search error:", error)
+      setResults([])
+    } finally {
       setLoading(false)
-    }, 800)
+    }
   }
 
   function handleClear() {
+    setInput("")
     setResults(null)
     setUnfilteredResults(null)
     setSearchedQuery("")
+    setLoading(false)
     inputRef.current?.focus()
   }
 
@@ -228,8 +254,8 @@ export function SearchInterface() {
 
   const placeholder =
     mode === "exact"
-      ? 'Search keywords like "beach", "dinner plans"...'
-      : 'Ask anything like "when did we plan beach week?"'
+      ? 'Search keywords like "dinner", "meeting"...'
+      : 'Ask anything like "when did we plan to meet?"'
 
   const hasResults = results !== null
 
@@ -239,12 +265,50 @@ export function SearchInterface() {
       <div className="flex-1 overflow-y-auto">
         {!hasResults && !loading ? (
           <div className="flex h-full flex-col items-center justify-center px-4 pb-24">
-            <h2 className="text-balance text-center font-serif text-4xl italic text-foreground md:text-5xl">
-              What are you looking for?
-            </h2>
-            <p className="mt-1 text-center text-muted-foreground">
-              Search your messages or ask about your conversations.
-            </p>
+            <div className="w-full max-w-md space-y-2.5">
+              {/* First message - incoming */}
+              {showFirstMessage && (
+                <div className="flex justify-start animate-in fade-in slide-in-from-left-3 duration-150">
+                  <div className="relative">
+                    <div className="rounded-[18px] rounded-bl-md bg-white/95 px-4 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+                      <p className="text-[15px] leading-snug text-gray-900">
+                        What are you looking for?
+                      </p>
+                    </div>
+                    {/* Tapback pops in separately */}
+                    {showTapback && (
+                      <div className="absolute -top-4 -right-4 animate-in zoom-in-50 duration-150">
+                        <Tapback transform="" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Typing indicator - blue */}
+              {showTyping && (
+                <div className="flex justify-end animate-in fade-in slide-in-from-right-3 duration-150">
+                  <div className="rounded-[18px] rounded-br-md bg-iosBlue px-4 py-3">
+                    <div className="flex gap-1">
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-white/70 [animation-delay:-0.3s]" />
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-white/70 [animation-delay:-0.15s]" />
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-white/70" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Second message - outgoing */}
+              {showSecondMessage && (
+                <div className="flex justify-end animate-in fade-in slide-in-from-right-3 duration-150">
+                  <div className="max-w-[50%] rounded-[18px] rounded-br-md bg-iosBlue px-4 py-2.5 shadow-[0_2px_8px_rgba(0,122,255,0.3)]">
+                    <p className="text-[15px] leading-snug text-white">
+                      Search messages or ask questions about past conversations.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="mx-auto max-w-xl px-4 pt-6 pb-8 md:px-0">
@@ -276,11 +340,14 @@ export function SearchInterface() {
               </div>
             )}
 
-            {/* Loading state */}
+            {/* Loading state - skeleton loaders */}
             {loading && (
-              <div className="flex flex-col items-center justify-center py-20">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#007AFF] border-t-transparent" />
-                <p className="mt-3 text-sm text-muted-foreground">Searching your messages...</p>
+              <div className="space-y-6">
+                <ThreadSkeleton />
+                <div className="mx-auto h-px w-16 bg-foreground/[0.06]" />
+                <ThreadSkeleton />
+                <div className="mx-auto h-px w-16 bg-foreground/[0.06]" />
+                <ThreadSkeleton />
               </div>
             )}
 
@@ -324,18 +391,23 @@ export function SearchInterface() {
       <div className="relative border-t border-black/[0.04]">
         {/* AI glow behind everything - absolute positioned with lower z-index */}
         <div 
-          className={`pointer-events-none absolute inset-0 bg-gradient-to-r blur-2xl from-blue-500/40 to-purple-500/40 transition-opacity duration-500 ${
+          className={`pointer-events-none absolute inset-x-0 -top-40 bottom-0 bg-gradient-to-t from-iosBlue/20 via-purple-500/10 to-transparent transition-opacity duration-300 ${
             mode === "ask" ? "opacity-100" : "opacity-0"
           }`}
           style={{ zIndex: 0 }}
         />
         
         {/* Content layer with backdrop blur - sits in front of glow */}
-        <div className="relative bg-white/75 px-4 pb-6 pt-4 backdrop-blur-xl md:px-8" style={{ zIndex: 1 }}>
+        <div className="relative bg-white/80 px-4 pb-6 pt-3 backdrop-blur-sm md:px-8" style={{ zIndex: 1 }}>
           <div className="mx-auto max-w-xl">
             {/* Filter + Mode row */}
             <div className="mb-2.5 flex items-center justify-between">
-              <ContactSelector filter={filter} onFilterChange={setFilter} />
+              <ContactSelector 
+                filter={filter} 
+                onFilterChange={setFilter}
+                allContacts={searchData.allContacts}
+                recentContacts={searchData.recentContacts}
+              />
               <SearchModeToggle mode={mode} onModeChange={setMode} />
             </div>
 
@@ -347,12 +419,12 @@ export function SearchInterface() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={placeholder}
-                className="w-full rounded-full border border-border/60 bg-white py-3 pl-4 pr-12 text-sm text-foreground shadow-sm placeholder:text-muted-foreground/70 focus:border-[#007AFF]/40 focus:outline-none focus:ring-2 focus:ring-[#007AFF]/15"
+                className="w-full rounded-full border border-border/60 bg-white py-3 pl-4 pr-12 text-sm text-foreground shadow-sm placeholder:text-muted-foreground/70 focus:border-iosBlue/40 focus:outline-none focus:ring-2 focus:ring-iosBlue/15"
               />
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-[#007AFF] text-white transition-opacity disabled:opacity-30"
+                className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-iosBlue text-white transition-opacity disabled:opacity-30"
                 aria-label="Search"
               >
                 <svg

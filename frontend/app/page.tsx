@@ -1,4 +1,7 @@
+"use client"
+
 import { SearchInterface } from "@/components/search-interface"
+import { mockSearchData } from "@/lib/mock-data"
 
 export default function Page() {
   return (
@@ -13,18 +16,15 @@ export default function Page() {
       {/* Header */}
       <header className="flex items-center justify-between px-6 pb-2 pt-5 md:px-10">
         <div className="flex items-center gap-2.5">
-          <span className="font-serif text-2xl italic text-foreground">
+          <span className="font-serif text-3xl italic text-foreground">
             receipts
-          </span>
-          <span className="rounded-full bg-imsg-blue/10 px-2 py-0.5 text-[10px] font-medium tracking-wide text-imsg-blue">
-            BETA
           </span>
         </div>
       </header>
 
       {/* Chat interface */}
       <div className="flex-1 overflow-hidden">
-        <SearchInterface />
+        <SearchInterface searchData={mockSearchData} />
       </div>
     </main>
   )
