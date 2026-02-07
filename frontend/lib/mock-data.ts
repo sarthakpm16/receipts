@@ -89,7 +89,65 @@ export const mockAskThreads: Thread[] = [
   },
 ]
 
-// Mock search function that simulates backend call
+// Real search function that calls the backend
+export async function realSearch(
+  query: string,
+  mode: "exact" | "ask",
+  filter: ContactFilter
+): Promise<Thread[]> {
+  const API_BASE = "http://localhost:8000"
+  
+  if (mode === "exact") {
+    // Call the /search endpoint
+    const response = await fetch(`${API_BASE}/search?query=${encodeURIComponent(query)}&context_size=5`)
+    if (!response.ok) {
+      throw new Error(`Search failed: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    // Transform backend response to Thread format
+    const threads: Thread[] = data.results.map((result: any) => {
+      // Format messages
+      const messages: TextMessage[] = result.messages.map((msg: any) => ({
+        sender: msg.sender_name === "ME" ? "You" : msg.sender_name,
+        text: msg.text,
+        time: new Date(msg.sent_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        isUser: msg.sender_name === "ME",
+        isMatch: msg.is_match // Add flag to highlight the matching message
+      }))
+      
+      // Extract date from the match message
+      const matchMsg = result.messages[result.match_index]
+      const date = new Date(matchMsg.sent_at).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+      
+      return {
+        id: `${result.chat_id}-${result.match_message_id}`,
+        date,
+        context: result.title,
+        messages,
+        matchIndex: result.match_index,
+        hasMoreBefore: result.has_more_before,
+        hasMoreAfter: result.has_more_after,
+        chatId: result.chat_id,
+        matchMessageId: result.match_message_id
+      }
+    })
+    
+    return threads
+  } else {
+    // For "ask" mode, use the /ask endpoint (existing implementation)
+    // For now, return mock data
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+    return mockAskThreads
+  }
+}
+
+// Mock search function for development
 export async function mockSearch(
   query: string,
   mode: "exact" | "ask",
@@ -102,7 +160,14 @@ export async function mockSearch(
   return mode === "ask" ? mockAskThreads : mockExactThreads
 }
 
-// Export the search data object
+// Export the search data object (using real search)
+export const searchData: SearchData = {
+  allContacts: mockAllContacts,
+  recentContacts: mockRecentContacts,
+  onSearch: realSearch,
+}
+
+// Export mock version for testing
 export const mockSearchData: SearchData = {
   allContacts: mockAllContacts,
   recentContacts: mockRecentContacts,

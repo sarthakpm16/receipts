@@ -16,6 +16,7 @@ export interface TextMessage {
   text: string
   time: string
   isUser?: boolean
+  isMatch?: boolean // Flag to highlight the matching message
 }
 
 export interface Thread {
@@ -23,6 +24,11 @@ export interface Thread {
   date: string
   context: string
   messages: TextMessage[]
+  matchIndex?: number // Index of the matching message
+  hasMoreBefore?: boolean // Whether there are more messages before this context
+  hasMoreAfter?: boolean // Whether there are more messages after this context
+  chatId?: number // Chat ID for expansion
+  matchMessageId?: number // Message ID for expansion
 }
 
 export interface Contact {
@@ -44,10 +50,16 @@ export interface SearchData {
 
 /* ── iMessage-style bubble for a single message ── */
 function MessageBubble({ msg, showSender }: { msg: TextMessage; showSender: boolean }) {
+  const isMatch = msg.isMatch || false
+  
   if (msg.isUser) {
     return (
       <div className="flex flex-col items-end">
-        <div className="max-w-[75%] rounded-2xl rounded-br-md bg-iosBlue px-3.5 py-2">
+        <div className={`max-w-[75%] rounded-2xl rounded-br-md px-3.5 py-2 ${
+          isMatch 
+            ? "bg-iosBlue ring-2 ring-iosBlue/50 ring-offset-2" 
+            : "bg-iosBlue"
+        }`}>
           <p className="text-[15px] leading-snug text-white">{msg.text}</p>
         </div>
         <span className="mt-0.5 pr-1 text-[10px] text-muted-foreground/60">{msg.time}</span>
@@ -60,7 +72,11 @@ function MessageBubble({ msg, showSender }: { msg: TextMessage; showSender: bool
       {showSender && (
         <span className="mb-0.5 pl-1 text-[11px] font-medium text-muted-foreground">{msg.sender}</span>
       )}
-      <div className="max-w-[75%] rounded-2xl rounded-bl-md bg-[#E9E9EB] px-3.5 py-2">
+      <div className={`max-w-[75%] rounded-2xl rounded-bl-md px-3.5 py-2 ${
+        isMatch
+          ? "bg-yellow-100 ring-2 ring-yellow-400/50 ring-offset-2"
+          : "bg-[#E9E9EB]"
+      }`}>
         <p className="text-[15px] leading-snug text-foreground">{msg.text}</p>
       </div>
       <span className="mt-0.5 pl-1 text-[10px] text-muted-foreground/60">{msg.time}</span>
@@ -109,10 +125,52 @@ function ThreadSkeleton() {
 
 /* ── A conversation thread card ── */
 function ConversationThread({ thread }: { thread: Thread }) {
-  const [expanded, setExpanded] = useState(false)
-  const previewCount = 3
-  const hasMore = thread.messages.length > previewCount
-  const displayMessages = expanded ? thread.messages : thread.messages.slice(0, previewCount)
+  const [displayMessages, setDisplayMessages] = useState(thread.messages)
+  const [loadingBefore, setLoadingBefore] = useState(false)
+  const [loadingAfter, setLoadingAfter] = useState(false)
+  const [hasMoreBefore, setHasMoreBefore] = useState(thread.hasMoreBefore || false)
+  const [hasMoreAfter, setHasMoreAfter] = useState(thread.hasMoreAfter || false)
+
+  const loadMore = async (direction: "before" | "after") => {
+    if (!thread.chatId || !thread.matchMessageId) return
+    
+    if (direction === "before") {
+      setLoadingBefore(true)
+    } else {
+      setLoadingAfter(true)
+    }
+
+    try {
+      const firstMsg = displayMessages[0]
+      const lastMsg = displayMessages[displayMessages.length - 1]
+      
+      // TODO: Get actual message IDs from the messages
+      // For now, use the match message ID as a reference
+      const response = await fetch(
+        `http://localhost:8000/expand?chat_id=${thread.chatId}&message_id=${thread.matchMessageId}&before=10&after=10`
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        const newMessages: TextMessage[] = data.messages.map((msg: any) => ({
+          sender: msg.sender_name === "ME" ? "You" : msg.sender_name,
+          text: msg.text,
+          time: new Date(msg.sent_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+          isUser: msg.sender_name === "ME",
+          isMatch: false
+        }))
+        
+        setDisplayMessages(newMessages)
+        setHasMoreBefore(data.has_more_before)
+        setHasMoreAfter(data.has_more_after)
+      }
+    } catch (error) {
+      console.error("Failed to load more messages:", error)
+    } finally {
+      setLoadingBefore(false)
+      setLoadingAfter(false)
+    }
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl bg-white/80 shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] backdrop-blur-sm">
@@ -121,6 +179,30 @@ function ConversationThread({ thread }: { thread: Thread }) {
         <span className="text-sm font-semibold text-gray-900">{thread.context}</span>
         <span className="text-xs text-gray-500">{thread.date}</span>
       </div>
+
+      {/* Load more before button */}
+      {hasMoreBefore && (
+        <button
+          type="button"
+          onClick={() => loadMore("before")}
+          disabled={loadingBefore}
+          className="flex w-full items-center justify-center gap-1 border-b border-black/[0.04] py-2 text-[12px] font-medium text-iosBlue transition-colors hover:bg-black/[0.01] disabled:opacity-50"
+        >
+          {loadingBefore ? (
+            <>
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-iosBlue border-t-transparent" />
+              <span>Loading...</span>
+            </>
+          ) : (
+            <>
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+              <span>Load earlier messages</span>
+            </>
+          )}
+        </button>
+      )}
 
       {/* iMessage bubble area */}
       <div className="space-y-1.5 px-3 py-3">
@@ -131,27 +213,27 @@ function ConversationThread({ thread }: { thread: Thread }) {
         })}
       </div>
 
-      {/* Expand/collapse */}
-      {hasMore && (
+      {/* Load more after button */}
+      {hasMoreAfter && (
         <button
           type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-center gap-1 border-t border-black/[0.04] py-2.5 text-[12px] font-medium text-iosBlue transition-colors hover:bg-black/[0.01]"
+          onClick={() => loadMore("after")}
+          disabled={loadingAfter}
+          className="flex w-full items-center justify-center gap-1 border-t border-black/[0.04] py-2 text-[12px] font-medium text-iosBlue transition-colors hover:bg-black/[0.01] disabled:opacity-50"
         >
-          <svg
-            className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-          {expanded
-            ? "Show less"
-            : `${thread.messages.length - previewCount} more`}
+          {loadingAfter ? (
+            <>
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-iosBlue border-t-transparent" />
+              <span>Loading...</span>
+            </>
+          ) : (
+            <>
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+              <span>Load later messages</span>
+            </>
+          )}
         </button>
       )}
     </div>
@@ -203,24 +285,6 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
     }
   }, [results, askResult, loading, searchedQuery])
 
-  function filterThreadsByContact(threads: Thread[]): Thread[] {
-    if (filter.type === "all") return threads
-    
-    return threads.filter((thread) => {
-      if (filter.type === "person") {
-        // For person filter, show threads where context is the person OR they participated
-        return (
-          thread.context === filter.name ||
-          thread.messages.some((msg) => msg.sender === filter.name)
-        )
-      } else if (filter.type === "group") {
-        // For group filter, show only threads with matching context
-        return thread.context === filter.name
-      }
-      return true
-    })
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!input.trim()) return
@@ -238,10 +302,10 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
         const ask = await searchData.onAsk(query, filter)
         setAskResult(ask)
       } else {
-        const baseResults = await searchData.onSearch(query, mode, filter)
-        setUnfilteredResults(baseResults)
-        const filteredResults = filterThreadsByContact(baseResults)
-        setResults(filteredResults)
+        // Backend now handles filtering, no need for client-side filtering
+        const results = await searchData.onSearch(query, mode, filter)
+        setUnfilteredResults(results)
+        setResults(results)
       }
     } catch (error) {
       console.error(mode === "ask" ? "Ask error:" : "Search error:", error)
@@ -262,11 +326,21 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
     inputRef.current?.focus()
   }
 
-  // Re-filter results when filter changes
+  // Re-search with new filter when filter changes
   useEffect(() => {
-    if (unfilteredResults) {
-      const filteredResults = filterThreadsByContact(unfilteredResults)
-      setResults(filteredResults)
+    if (searchedQuery && unfilteredResults) {
+      // Re-run the search with the new filter
+      setLoading(true)
+      searchData.onSearch(searchedQuery, mode, filter)
+        .then((results) => {
+          setUnfilteredResults(results)
+          setResults(results)
+        })
+        .catch((error) => {
+          console.error("Search error:", error)
+          setResults([])
+        })
+        .finally(() => setLoading(false))
     }
   }, [filter])
 
