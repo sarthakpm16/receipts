@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# iMessage private data — NEVER commit
+data/
+tmp/
+*.parquet
+*.sqlite
+*.db
+chat.db*
+*.csv
+
+# Python
+.venv/
+__pycache__/
+*.pyc
