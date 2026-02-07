@@ -73,12 +73,39 @@ API runs at **http://localhost:8000**:
 The **Ask** tab in the app sends your question plus recent message context to **Google Gemini** and shows a short answer and which chats were used. To enable it:
 
 1. Get an API key: [Google AI Studio](https://aistudio.google.com/apikey)
-2. Set it before starting the API:
-   - **Windows (PowerShell):** `$env:GEMINI_API_KEY="your-key"`
-   - **macOS/Linux:** `export GEMINI_API_KEY=your-key`
-3. Start the API: `uvicorn app.main:app --reload`
+2. Put it in a file the backend can read (project root):
+   - Create or edit **`.env`** or **`.env.local`** in the project root (same folder as `package.json`).
+   - Add one line: **`GEMINI_API_KEY=your-key-here`** (no quotes unless the key has spaces).
+3. Restart the API: `uvicorn app.main:app --reload`
+
+The backend loads `.env` and `.env.local` automatically. Alternatively you can set the variable in the terminal before starting the API:  
+`$env:GEMINI_API_KEY="your-key"` (PowerShell) or `export GEMINI_API_KEY=your-key` (macOS/Linux).
 
 If `GEMINI_API_KEY` is not set, the Ask endpoint returns 400 with a message to set it.
+
+### If you see `ModuleNotFoundError: No module named 'anyio._backends'` (500 on /threads)
+
+This usually means a broken or mixed install of `anyio` (e.g. user vs system site-packages). Fix it by using a **virtual environment** and reinstalling:
+
+```bash
+# From project root
+python -m venv .venv
+
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# Windows (Cmd) or macOS/Linux
+# .venv\Scripts\activate   or   source .venv/bin/activate
+
+pip install -r app/requirements.txt
+uvicorn app.main:app --reload
+```
+
+If you already use a venv and still see the error, try:
+
+```bash
+pip install --upgrade anyio starlette fastapi uvicorn
+```
 
 ---
 

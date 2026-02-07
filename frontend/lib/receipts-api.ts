@@ -59,14 +59,26 @@ export interface AskResponse {
 }
 
 export async function askQuery(query: string, threadIds?: number[]): Promise<AskResponse> {
-  const res = await fetch(`${API_BASE}/ask`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: query.trim(), thread_ids: threadIds ?? null }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Ask failed");
+  try {
+    const res = await fetch(`${API_BASE}/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: query.trim(), thread_ids: threadIds ?? null }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === "string" ? err.detail : "Ask failed");
+    }
+    return res.json();
+  } catch (e) {
+    const isNetworkError =
+      e instanceof TypeError ||
+      (e instanceof Error && (e.message === "Failed to fetch" || /fetch|network/i.test(e.message)));
+    if (isNetworkError) {
+      throw new Error(
+        `Could not reach the API at ${API_BASE}. Make sure the backend is running: uvicorn app.main:app --reload`
+      );
+    }
+    throw e;
   }
-  return res.json();
 }

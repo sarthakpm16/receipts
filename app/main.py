@@ -1,3 +1,12 @@
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env and .env.local from project root so GEMINI_API_KEY is available
+_root = Path(__file__).resolve().parent.parent
+load_dotenv(_root / ".env")
+load_dotenv(_root / ".env.local")
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

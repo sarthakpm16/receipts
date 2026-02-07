@@ -162,6 +162,7 @@ function ConversationThread({ thread }: { thread: Thread }) {
 export function SearchInterface({ searchData }: { searchData: SearchData }) {
   const [results, setResults] = useState<Thread[] | null>(null)
   const [askResult, setAskResult] = useState<AskResult | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const [mode, setMode] = useState<SearchMode>("ask")
   const [filter, setFilter] = useState<ContactFilter>({ type: "all" })
@@ -229,6 +230,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
     setSearchedQuery(query)
     setInput("")
     setLoading(true)
+    setSearchError(null)
     setAskResult(null)
     setResults(null)
     setUnfilteredResults(null)
@@ -245,6 +247,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
       }
     } catch (error) {
       console.error(mode === "ask" ? "Ask error:" : "Search error:", error)
+      setSearchError(error instanceof Error ? error.message : "Something went wrong")
       setResults([])
       setAskResult(null)
     } finally {
@@ -256,6 +259,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
     setInput("")
     setResults(null)
     setAskResult(null)
+    setSearchError(null)
     setUnfilteredResults(null)
     setSearchedQuery("")
     setLoading(false)
@@ -366,6 +370,21 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
                 <ThreadSkeleton />
                 <div className="mx-auto h-px w-16 bg-foreground/[0.06]" />
                 <ThreadSkeleton />
+              </div>
+            )}
+
+            {/* Error state (e.g. API unreachable) */}
+            {!loading && searchError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-4 text-sm text-red-800">
+                <p className="font-medium">Request failed</p>
+                <p className="mt-1 text-red-700">{searchError}</p>
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="mt-3 text-sm font-medium text-red-600 hover:underline"
+                >
+                  Clear
+                </button>
               </div>
             )}
 
