@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import re, sqlite3, sys
+import re, sqlite3, sys, plistlib
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
@@ -49,7 +49,70 @@ def parse_vcf(text):
         for m in re.finditer(r"^EMAIL[^:]*:(.*)$", card, flags=re.M | re.I):
             h = norm_handle(m.group(1))
             if h and h not in contacts: contacts[h] = name
+
     return contacts
+
+def extract_text_from_attributed_body(blob):
+    """
+    attributedBody is usually an NSKeyedArchiver plist blob.
+    We try to parse it, then harvest all strings from $objects.
+    Fallback: heuristic string extraction from bytes.
+    """
+    if not blob:
+        return ""
+
+    # 1) Try plistlib (often works on modern macOS)
+    try:
+        obj = plistlib.loads(blob)
+        strings = []
+        def walk(x):
+            if isinstance(x, str):
+                strings.append(x)
+            elif isinstance(x, dict):
+                for v in x.values(): walk(v)
+            elif isinstance(x, (list, tuple)):
+                for v in x: walk(v)
+        walk(obj)
+
+        # Filter obvious noise keys and join unique-ish strings
+        cleaned = []
+        seen = set()
+        for s in strings:
+            s = s.strip()
+            if not s: 
+                continue
+            if s.startswith("$"): 
+                continue
+            if s in seen:
+                continue
+            seen.add(s)
+            cleaned.append(s)
+
+        # If we got something that looks like real text, return it
+        joined = " ".join(cleaned).strip()
+        if joined:
+            return joined
+    except Exception:
+        pass
+
+    # 2) Fallback: pull readable ASCII/UTF-8-ish runs from bytes
+    try:
+        text = blob.decode("utf-8", errors="ignore")
+    except Exception:
+        text = str(blob)
+
+    # grab long-ish printable sequences
+    parts = re.findall(r"[ -~]{3,}", text)  # printable ASCII runs
+    parts = [p.strip() for p in parts if p.strip()]
+    # remove common noise
+    noise = {"NSString", "NSAttributedString", "NSDictionary", "NSObject"}
+    parts = [p for p in parts if p not in noise]
+    final_text = " ".join(parts[:20]).strip()
+    cleaned_text = final_text.removeprefix("streamtyped").split("__kIMMessagePartAttributeName")[0].strip()
+
+    cleaned_text = re.sub(r'(?:\bNSMutable(?:Attributed)?String\b\s*)+', '', cleaned_text)
+    cleaned_text = re.sub(r'^[^A-Za-z]+', '', cleaned_text)
+    return cleaned_text
 
 def main():
     if not CHAT_DB.exists():
@@ -58,7 +121,7 @@ def main():
     WORK.mkdir(exist_ok=True)
     DATA.mkdir(exist_ok=True)
 
-    # Copy into work/ to avoid locks + ensure WAL is included
+    # Copy into work/ to avoid locks + include WAL/SHM
     WORK_DB.write_bytes(CHAT_DB.read_bytes())
     if WAL.exists(): (WORK / "chat.db-wal").write_bytes(WAL.read_bytes())
     if SHM.exists(): (WORK / "chat.db-shm").write_bytes(SHM.read_bytes())
@@ -68,7 +131,7 @@ def main():
         contacts = parse_vcf(VCF.read_text(errors="ignore"))
         print(f"Loaded contacts: {len(contacts)}")
     else:
-        print("No contacts.vcf found (group titles will be numbers/emails).")
+        print("No contacts.vcf found")
 
     if OUT_DB.exists(): OUT_DB.unlink()
 
@@ -95,7 +158,6 @@ def main():
       member_handle TEXT,
       member_name TEXT
     );
-
     CREATE INDEX idx_thread_members_chat ON thread_members(chat_id);
 
     CREATE TABLE messages(
@@ -105,7 +167,6 @@ def main():
       sender_name TEXT,
       text TEXT
     );
-
     CREATE INDEX idx_messages_chat_time ON messages(chat_id, sent_at);
     """)
 
@@ -117,7 +178,7 @@ def main():
         h = norm_handle(handle)
         return name_map.get(h, h)
 
-    # --- Build thread_members from chat_handle_join ---
+    # members
     members_by_chat = {}
     for r in src.execute("""
       SELECT chj.chat_id, h.id AS handle
@@ -127,8 +188,8 @@ def main():
     """):
         cid = r["chat_id"]
         h = norm_handle(r["handle"])
-        if not h: continue
-        members_by_chat.setdefault(cid, []).append(h)
+        if h:
+            members_by_chat.setdefault(cid, []).append(h)
 
     batch = []
     for cid, handles in members_by_chat.items():
@@ -137,7 +198,7 @@ def main():
     out.executemany("INSERT INTO thread_members(chat_id, member_handle, member_name) VALUES (?,?,?)", batch)
     out.commit()
 
-    # --- Build threads with good titles ---
+    # threads
     chats = src.execute(f"""
       WITH latest AS (
         SELECT cmj.chat_id, MAX(m.date) AS max_date
@@ -163,18 +224,16 @@ def main():
         if display:
             title = display
         elif ident and not ident.startswith("chat"):
-            # 1:1 chats often store phone/email here
             title = name_for(ident)
         else:
-            # Group: build from participant names
             parts = [name_for(h) for h in members_by_chat.get(cid, [])]
             title = ", ".join(parts[:5]) if parts else (ident or f"chat_{cid}")
 
-        out.execute("INSERT INTO threads(chat_id, title, last_message_at) VALUES (?,?,?)", (cid, title, c["last_message_at"]))
+        out.execute("INSERT INTO threads(chat_id, title, last_message_at) VALUES (?,?,?)",
+                    (cid, title, c["last_message_at"]))
     out.commit()
 
-    # --- Import messages (keep true chat_id via join, but de-dupe per (message_id, chat_id)) ---
-    # Some message rows can appear multiple times; we keep distinct pairs.
+    # messages (IMPORTANT: pull attributedBody too)
     msg_rows = src.execute(f"""
       SELECT DISTINCT
         m.ROWID AS message_id,
@@ -182,40 +241,40 @@ def main():
         datetime(m.date/1000000000 + {APPLE_EPOCH}, 'unixepoch','localtime') AS sent_at,
         m.is_from_me,
         h.id AS handle,
-        m.text
+        m.text AS text,
+        m.attributedBody AS attributed_body
       FROM message m
       JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
       LEFT JOIN handle h ON h.ROWID = m.handle_id
     """)
 
     batch = []
-    seen = set()
     for r in msg_rows:
-        mid = r["message_id"]
-        cid = r["chat_id"]
-        key = (mid, cid)
-        if key in seen: 
-            continue
-        seen.add(key)
-
         if r["is_from_me"] == 1:
             sender = "ME"
         else:
             sender = name_for(r["handle"]) if r["handle"] else "UNKNOWN"
 
-        batch.append((mid, cid, r["sent_at"], sender, r["text"] or ""))
+        text = r["text"]
+        if not text and r["attributed_body"]:
+            text = extract_text_from_attributed_body(r["attributed_body"])
+        if not text:
+            text = ""
+
+        batch.append((r["message_id"], r["chat_id"], r["sent_at"], sender, text))
 
         if len(batch) >= 5000:
-            out.executemany("INSERT OR IGNORE INTO messages VALUES (?,?,?,?,?)", batch)
+            out.executemany("INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?)", batch)
             out.commit()
             batch.clear()
+
     if batch:
-        out.executemany("INSERT OR IGNORE INTO messages VALUES (?,?,?,?,?)", batch)
+        out.executemany("INSERT OR REPLACE INTO messages VALUES (?,?,?,?,?)", batch)
         out.commit()
 
     src.close()
     out.close()
-    print("✅ Done → data/processed.db (now includes threads + members)")
+    print("✅ Done → data/processed.db (includes your sent texts too)")
 
 if __name__ == "__main__":
     main()
