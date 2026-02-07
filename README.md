@@ -1,5 +1,7 @@
 # Receipts App
 
+**→ [How to run](RUN.md)** — Use your `input/chat.db` and `input/contacts.vcf`, then run the import and app.
+
 ## Project Structure
 
 ```

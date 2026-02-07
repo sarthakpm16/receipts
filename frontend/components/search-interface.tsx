@@ -30,10 +30,16 @@ export interface Contact {
   type: "person" | "group"
 }
 
+export interface AskResult {
+  answer: string
+  sources: { chat_id: number; title: string }[]
+}
+
 export interface SearchData {
   allContacts: Contact[]
   recentContacts: Contact[]
   onSearch: (query: string, mode: SearchMode, filter: ContactFilter) => Promise<Thread[]>
+  onAsk?: (query: string, filter: ContactFilter) => Promise<AskResult>
 }
 
 /* ── iMessage-style bubble for a single message ── */
@@ -155,6 +161,7 @@ function ConversationThread({ thread }: { thread: Thread }) {
 /* ── Main search interface ── */
 export function SearchInterface({ searchData }: { searchData: SearchData }) {
   const [results, setResults] = useState<Thread[] | null>(null)
+  const [askResult, setAskResult] = useState<AskResult | null>(null)
   const [input, setInput] = useState("")
   const [mode, setMode] = useState<SearchMode>("ask")
   const [filter, setFilter] = useState<ContactFilter>({ type: "all" })
@@ -171,7 +178,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
   
   // Animate empty state messages
   useEffect(() => {
-    if (!results && !loading && !searchedQuery) {
+    if (!results && !askResult && !loading && !searchedQuery) {
       // Reset animation
       setShowFirstMessage(false)
       setShowTapback(false)
@@ -194,7 +201,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
         clearTimeout(timer4)
       }
     }
-  }, [results, loading, searchedQuery])
+  }, [results, askResult, loading, searchedQuery])
 
   function filterThreadsByContact(threads: Thread[]): Thread[] {
     if (filter.type === "all") return threads
@@ -218,18 +225,28 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
     e.preventDefault()
     if (!input.trim()) return
 
-    setSearchedQuery(input.trim())
+    const query = input.trim()
+    setSearchedQuery(query)
     setInput("")
     setLoading(true)
+    setAskResult(null)
+    setResults(null)
+    setUnfilteredResults(null)
 
     try {
-      const baseResults = await searchData.onSearch(input.trim(), mode, filter)
-      setUnfilteredResults(baseResults)
-      const filteredResults = filterThreadsByContact(baseResults)
-      setResults(filteredResults)
+      if (mode === "ask" && searchData.onAsk) {
+        const ask = await searchData.onAsk(query, filter)
+        setAskResult(ask)
+      } else {
+        const baseResults = await searchData.onSearch(query, mode, filter)
+        setUnfilteredResults(baseResults)
+        const filteredResults = filterThreadsByContact(baseResults)
+        setResults(filteredResults)
+      }
     } catch (error) {
-      console.error("Search error:", error)
+      console.error(mode === "ask" ? "Ask error:" : "Search error:", error)
       setResults([])
+      setAskResult(null)
     } finally {
       setLoading(false)
     }
@@ -238,6 +255,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
   function handleClear() {
     setInput("")
     setResults(null)
+    setAskResult(null)
     setUnfilteredResults(null)
     setSearchedQuery("")
     setLoading(false)
@@ -257,7 +275,7 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
       ? 'Search keywords like "dinner", "meeting"...'
       : 'Ask anything like "when did we plan to meet?"'
 
-  const hasResults = results !== null
+  const hasResults = results !== null || askResult !== null
 
   return (
     <div className="flex h-full flex-col">
@@ -351,8 +369,34 @@ export function SearchInterface({ searchData }: { searchData: SearchData }) {
               </div>
             )}
 
-            {/* Conversation threads */}
-            {!loading && results && (
+            {/* Ask mode: answer + sources */}
+            {!loading && askResult && (
+              <div className="space-y-6 pb-6">
+                <div className="overflow-hidden rounded-2xl bg-white/80 shadow-[0_1px_4px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.05] backdrop-blur-sm">
+                  <div className="border-b border-black/[0.04] px-4 py-2.5">
+                    <span className="text-sm font-semibold text-gray-900">Answer</span>
+                  </div>
+                  <div className="whitespace-pre-wrap px-4 py-4 text-[15px] leading-snug text-foreground">
+                    {askResult.answer}
+                  </div>
+                </div>
+                {askResult.sources.length > 0 && (
+                  <>
+                    <p className="text-xs font-medium text-muted-foreground">Based on conversations with:</p>
+                    <ul className="space-y-1 text-sm text-foreground">
+                      {askResult.sources.map((s) => (
+                        <li key={s.chat_id} className="rounded-lg bg-white/60 px-3 py-2 ring-1 ring-black/[0.04]">
+                          {s.title}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Exact mode: conversation threads */}
+            {!loading && !askResult && results && (
               <>
                 {results.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20">
